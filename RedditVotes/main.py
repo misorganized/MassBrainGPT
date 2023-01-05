@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import torch.optim as optim
 import torch
 import csv
@@ -8,7 +7,9 @@ import matplotlib.pyplot as plt
 from collections import Counter
 import numpy as np
 from tqdm import tqdm
-import matplotlib.animation as animation
+import random
+from pathlib import Path
+import os
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("Device: {}".format(device))
@@ -18,23 +19,52 @@ with open('RedditVotes/comments.csv', 'r') as f:
     reader = csv.reader(f)
     preprocessed_comments = [row for row in reader]
     
-preprocessed_comments = preprocessed_comments[0:100000]
+preprocessed_comments = preprocessed_comments[0:30]
 
-# Define the model
-class UpvotePredictor(nn.Module):
-    def __init__(self, input_size, hidden_size, output_size):
-        super(UpvotePredictor, self).__init__()
-        self.fc1 = nn.Linear(input_size, hidden_size)
-        self.fc2 = nn.Linear(hidden_size, hidden_size)
-        self.fc3 = nn.Linear(hidden_size, hidden_size)
-        self.fc4 = nn.Linear(hidden_size, hidden_size)
-        self.fc5 = nn.Linear(hidden_size, hidden_size)
-        self.fc6 = nn.Linear(hidden_size, output_size)
+
+# better model
+class TextClassifier(nn.Module):
+    def __init__(self, vocabulary_size, embedding_dim, hidden_dim, output_dim):
+        super().__init__()
+
+        # Embedding layer
+        self.embedding = nn.Embedding(vocabulary_size, embedding_dim)
+
+        # Convolutional layer
+        self.conv = nn.Conv1d(in_channels=embedding_dim, out_channels=hidden_dim, kernel_size=3, padding=1)
+
+        # Gated Recurrent Unit (GRU) layer
+        self.gru = nn.GRU(input_size=hidden_dim, hidden_size=hidden_dim, num_layers=2, batch_first=True, bidirectional=True)
+
+        # Fully-connected layer
+        self.fc = nn.Linear(in_features=hidden_dim*2, out_features=output_dim)
+
+        # Activation function
+        self.act = nn.Sigmoid()
 
     def forward(self, x):
-        x = self.fc1(x)
+        # Embed the input tensor
+        print(x)
+        x = self.embedding(x.long())
+        print(x)
+        # Apply the convolutional layer
+        x = self.conv(x.permute(0, 2, 1))
+        print(x)
         x = torch.relu(x)
-        x = self.fc6(x)
+        print(x)
+
+        # Apply the GRU layer
+        x, _ = self.gru(x)
+        print(x)
+
+        # Apply the fully-connected layer
+        x = self.fc(x[:, -1, :])
+        print(x)
+
+        # Apply the activation function
+        x = self.act(x)
+        print(x)
+
         return x
 
 # Convert the comments to vectors
@@ -65,7 +95,8 @@ def one_hot_encode(text, vocabulary):
     return vector
 
 
-top_words = top_words(preprocessed_comments, 2000)
+top_words = top_words(preprocessed_comments, 256)
+print(len(top_words))
 
 vocabulary = {word: i for i, word in enumerate(top_words)}
 
@@ -87,9 +118,16 @@ scores = [int(score) for score in scores]
 targets = torch.tensor(scores).to(device)
 
 # Create the model, criterion, and optimizer
-model = UpvotePredictor(input_size=tensors.size(1), hidden_size=64, output_size=1).to(device)
+# model = UpvotePredictor(input_size=tensors.size(1), hidden_size=64, output_size=1).to(device)
+
+model = TextClassifier(len(top_words), 128, 256, 1).to(device)
+
+if os.path.exists('./models/redditvotes-0.pth'):
+        print("Loaded Model")
+        model.load_state_dict(torch.load(f='./models/redditvotes-0.pth'))
+
 criterion = nn.MSELoss().to(device)
-optimizer = optim.Adam(model.parameters(), lr=1.0)
+optimizer = optim.Adam(model.parameters(), lr=15.0)
 
 losses = []
 metric = []
@@ -106,20 +144,46 @@ for epoch in range(max_epochs):
 
     tensors = tensors.to(torch.float32)
     targets = targets.to(torch.float32)
-
+    print(tensors, tensors.shape)
     output = model(tensors)
+    print(output)
     targets = targets.to(torch.float32)
     output = output.view(-1)
-    print(output[0:10], targets[0:10])
     loss = criterion(output, targets)
 
     losses.append(loss.item())
-
-
 
     # Backward pass and optimization
     optimizer.zero_grad()
     loss.backward()
     optimizer.step()
-    if epoch % 100 == 0:
-        print(f'Epoch {epoch}: loss = {loss:.4f}')
+    test_id = random.randint(1, 7)
+    if epoch % 10 == 0:
+        print(f'Epoch {epoch}: loss = {loss:.4f}, Input: {targets[test_id]}, Output: {output[test_id]}')
+    if epoch % 50 == 0:
+    # 1. Create models directory
+        MODEL_PATH = Path("models")
+        MODEL_PATH.mkdir(parents=True, exist_ok=True)
+
+        # 2. Create model save path
+        MODEL_NAME = "redditvotes-0.pth"
+        MODEL_SAVE_PATH = MODEL_PATH / MODEL_NAME
+
+        # 3. Save the model state dict
+        print(f"Saving model to: {MODEL_SAVE_PATH}")
+        torch.save(obj=model.state_dict(),  # only saving the state_dict() only saves the models learned parameters
+                    f=MODEL_SAVE_PATH)
+
+
+# 1. Create models directory
+MODEL_PATH = Path("models")
+MODEL_PATH.mkdir(parents=True, exist_ok=True)
+
+# 2. Create model save path
+MODEL_NAME = "redditvotes-0.pth"
+MODEL_SAVE_PATH = MODEL_PATH / MODEL_NAME
+
+# 3. Save the model state dict
+print(f"Saving model to: {MODEL_SAVE_PATH}")
+torch.save(obj=model.state_dict(),  # only saving the state_dict() only saves the models learned parameters
+            f=MODEL_SAVE_PATH)
