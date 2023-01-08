@@ -18,8 +18,10 @@ print("Device: {}".format(device))
 with open('RedditVotes/comments.csv', 'r') as f:
     reader = csv.reader(f)
     preprocessed_comments = [row for row in reader]
-    
-preprocessed_comments = preprocessed_comments[0:30]
+
+comments = 30
+
+preprocessed_comments = preprocessed_comments[0:comments]
 
 
 # better model
@@ -94,8 +96,8 @@ def one_hot_encode(text, vocabulary):
 
     return vector
 
-
-top_words = top_words(preprocessed_comments, 256)
+vocab_amount = 256
+top_words = top_words(preprocessed_comments, vocab_amount)
 print(len(top_words))
 
 vocabulary = {word: i for i, word in enumerate(top_words)}
@@ -120,14 +122,14 @@ targets = torch.tensor(scores).to(device)
 # Create the model, criterion, and optimizer
 # model = UpvotePredictor(input_size=tensors.size(1), hidden_size=64, output_size=1).to(device)
 
-model = TextClassifier(len(top_words), 128, 256, 1).to(device)
+model = TextClassifier(len(top_words), 128, vocab_amount, 1).to(device)
 
 if os.path.exists('./models/redditvotes-0.pth'):
         print("Loaded Model")
         model.load_state_dict(torch.load(f='./models/redditvotes-0.pth'))
 
 criterion = nn.MSELoss().to(device)
-optimizer = optim.Adam(model.parameters(), lr=15.0)
+optimizer = optim.Adam(model.parameters(), lr=1.0)
 
 losses = []
 metric = []
@@ -157,7 +159,7 @@ for epoch in range(max_epochs):
     optimizer.zero_grad()
     loss.backward()
     optimizer.step()
-    test_id = random.randint(1, 7)
+    test_id = random.randint(0, comments)
     if epoch % 10 == 0:
         print(f'Epoch {epoch}: loss = {loss:.4f}, Input: {targets[test_id]}, Output: {output[test_id]}')
     if epoch % 50 == 0:
