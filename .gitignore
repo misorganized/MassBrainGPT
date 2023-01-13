@@ -1,4 +1,4 @@
 RedditVotes/comments.csv
-/dataset/
-/.idea/
-/WikiBot/db/__pycache__/
+.idea/
+WikiBot/db/__pycache__/
+WikiBot/Wikipedia.db

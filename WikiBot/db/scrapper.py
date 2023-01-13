@@ -5,10 +5,10 @@ import sys
 from tqdm import tqdm
 sys.tracebacklimit = 0
 wikipedia.set_lang("en")
-db = db.db("Wikipedia.db")
+db = db.db("Local.db")
 
 def get_random_pages(num:int):
-    for n in range(num):
+    for n in tqdm(range(num)):
         try:
             page = wikipedia.random(1)
             summary = wikipedia.summary(page, sentences=5)
