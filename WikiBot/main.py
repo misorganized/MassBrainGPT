@@ -1,13 +1,16 @@
 import os
 from pathlib import Path
-
+import itertools
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
+from tqdm import tqdm
+import string
 
 # hyper-parameters
 model_name = 'wiki-bot-0.pth'
-batch_size = 32  # how many independent sequences will we process in parallel?
+chunk_size = 1024 * 1024 * 1024  # 1 GB
+batch_size = 75  # how many independent sequences will we process in parallel?
 block_size = 256  # what is the maximum context length for predictions?
 max_iters = 2000  # how many iterations to train for?
 eval_interval = 100
@@ -19,12 +22,22 @@ n_head = 6
 n_layer = 6
 dropout = 0.2
 # ------------
-with open('Wikipedia.txt', 'r', encoding='utf-8', errors='ignore') as f:
-    text = f.read()
+
+low = 'a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v','w','x','y','z'
+upper = 'A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T','U','V','W','X','Y','Z'
+
+print('Device: ', device)
+with open('opentext.txt', 'r', encoding='utf-8', errors='ignore') as f:
+    in_text = f.read(1000000000)
+    text = ''.join(c for c in tqdm(in_text) if c in low or c in upper or c in string.punctuation or c == '\n' or c == ' ')
 
 # here are all the unique characters that occur in this text
+print(text[:100])
+print(len(text))
 chars = sorted(list(set(text)))
 vocab_size = len(chars)
+print(chars)
+print(vocab_size)
 # create a mapping from characters to integers
 stoi = {ch: i for i, ch in enumerate(chars)}
 itos = {i: ch for i, ch in enumerate(chars)}
@@ -215,8 +228,8 @@ def save_model():
 
 # create a PyTorch optimizer
 optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
-
-for iter in range(max_iters):
+print("Starting Training")
+for iter in itertools.cycle(range(max_iters)):
 
     # every once in a while evaluate the loss on train and val sets
     if iter % eval_interval == 0 or iter == max_iters - 1:

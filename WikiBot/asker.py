@@ -1,11 +1,12 @@
 import os
-
+from tqdm import tqdm
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
+import string
 
 model_name = 'wiki-bot-0.pth'
-batch_size = 32  # how many independent sequences will we process in parallel?
+batch_size = 75  # how many independent sequences will we process in parallel?
 block_size = 256  # what is the maximum context length for predictions?
 max_iters = 2000  # how many iterations to train for?
 eval_interval = 100
@@ -17,8 +18,12 @@ n_head = 6
 n_layer = 6
 dropout = 0.2
 
-with open('Wikipedia.txt', 'r', encoding='utf-8', errors='ignore') as f:
-    text = f.read()
+low = 'a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v','w','x','y','z'
+upper = 'A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T','U','V','W','X','Y','Z'
+
+with open('opentext.txt', 'r', encoding='utf-8', errors='ignore') as f:
+    in_text = f.read(1000000000)
+    text = ''.join(c for c in tqdm(in_text) if c in low or c in upper or c in string.punctuation or c == '\n' or c == '')
 
 # here are all the unique characters that occur in this text
 chars = sorted(list(set(text)))
