@@ -23,13 +23,16 @@ n_layer = 6
 dropout = 0.2
 # ------------
 
-low = 'a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v','w','x','y','z'
-upper = 'A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T','U','V','W','X','Y','Z'
+low = 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z'
+upper = 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'
+number = '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'
+punctuation = '!', '"', '#', '$', '%', '&', "'", '(', ')', '*', '+', ',', '-', '.', '/', ':', ';', '<', '=', '>', '?', '@', '[', '\\', ']', '^', '_', '`', '{', '|', '}', '~'
 
 print('Device: ', device)
 with open('opentext.txt', 'r', encoding='utf-8', errors='ignore') as f:
     in_text = f.read(1000000000)
-    text = ''.join(c for c in tqdm(in_text) if c in low or c in upper or c in string.punctuation or c == '\n' or c == ' ')
+    text = ''.join(c for c in tqdm(in_text) if
+                   c in low or c in upper or c in number or c in punctuation or c == '\n' or c == ' ')
 
 # here are all the unique characters that occur in this text
 print(text[:100])
@@ -210,6 +213,7 @@ if os.path.exists('./models/{}'.format(model_name)):
     print("Loaded Model")
     model.load_state_dict(torch.load(f='./models/{}'.format(model_name)))
 print(sum(p.numel() for p in m.parameters()), 'M parameters')
+
 
 def save_model():
     # 1. Create models directory

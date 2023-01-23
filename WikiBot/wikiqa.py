@@ -1,12 +1,15 @@
 import os
-from tqdm import tqdm
+from pathlib import Path
+
 import torch
 import torch.nn as nn
+from datasets import load_dataset
 from torch.nn import functional as F
-import string
-from timers import FunctionTimer
+from torch.utils.data import DataLoader
 
+# hyper-parameters
 model_name = 'wiki-bot-0.pth'
+chunk_size = 1024 * 1024 * 1024  # 1 GB
 batch_size = 75  # how many independent sequences will we process in parallel?
 block_size = 256  # what is the maximum context length for predictions?
 max_iters = 2000  # how many iterations to train for?
@@ -18,25 +21,25 @@ n_embd = 384  # embedding dimension
 n_head = 6
 n_layer = 6
 dropout = 0.2
+# ------------
 
 low = 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z'
 upper = 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'
+number = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
+punctuation = '!', '"', '#', '$', '%', '&', "'", '(', ')', '*', '+', ',', '-', '.', '/', ':', ';', '<', '=', '>', '?', '@', '[', '\\', ']', '^', '_', '`', '{', '|', '}', '~'
 
-chars = ["\n", " ", "!", "\"", "#", "$", "%", "&", "\'", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=",
-         ">", "?", "@", "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S",
-         "T", "U", "V", "W", "X", "Y", "Z", "[", "\\", "g ", "^", "_", "`", "a", "b", "c", "d", "e", "f", "g", "h", "i",
-         "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z", '{', "|", '}', "~"]
+print('Device: ', device)
+chars = ["\n", " ", "!", "\"", "#", "$", "%", "&", "\'", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "?", "@", "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z", "[", "\\", "g ", "^", "_", "`", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z", '{', "|", '}', "~"]
 
 vocab_size = len(chars)
 
-print("Vocab Size: ", vocab_size)
+print(chars)
+print(vocab_size)
 # create a mapping from characters to integers
 stoi = {ch: i for i, ch in enumerate(chars)}
 itos = {i: ch for i, ch in enumerate(chars)}
 encode = lambda s: [stoi[c] for c in s]  # encoder: take a string, output a list of integers
 decode = lambda l: ''.join([itos[i] for i in l])  # decoder: take a list of integers, output a string
-
-
 class Head(nn.Module):
     """ one head of self-attention """
 
@@ -164,22 +167,89 @@ class BigramLanguageModel(nn.Module):
         return idx
 
 
-model = BigramLanguageModel()
-m = model.to(device)
+class FineTunedWikiQA(nn.Module):
+    def __init__(self, model, n_classes):
+        super().__init__()
+        # freeze the existing layers
+        for param in model.parameters():
+            param.requiresGrad = False
+
+        self.model = model
+        # add new layers
+        self.classifier = nn.Linear(n_embd, n_classes)
+        self.question_encoder = nn.LSTM(input_size=len(chars), hidden_size=n_embd, num_layers=2)
+        self.answer_encoder = nn.LSTM(input_size=len(chars), hidden_size=n_embd, num_layers=2)
+
+    def forward(self, question, answer):
+        question_encoded, _ = self.question_encoder(question)
+        answer_encoded, _ = self.answer_encoder(answer)
+
+        # pass the encoded question and answer through the model
+        x = self.model(question_encoded)
+        y = self.model(answer_encoded)
+
+        # concatenate the outputs
+        z = torch.cat([x, y], dim=-1)
+
+        # pass the concatenated output through the classifier
+        logits = self.classifier(z)
+        return logits
+
+
+# instantiate the new model
+n_classes = 2
+model = BigramLanguageModel().to(device)
+
 if os.path.exists('./models/{}'.format(model_name)):
     print("Loaded Model")
     model.load_state_dict(torch.load(f='./models/{}'.format(model_name)))
+print(sum(p.numel() for p in model.parameters()), 'M parameters')
 
-print(sum(p.numel() for p in m.parameters()), 'parameters')
+finetuned_model = FineTunedWikiQA(model, n_classes).to(device)
 
-while True:
-    try:
-        question = input("> ")
-        f = FunctionTimer('Question Asked')
-        question = torch.tensor(encode(question), dtype=torch.long).to(device)
-        context = question.unsqueeze(0)
-        output = model.generate(context, max_new_tokens=200)
-        print(decode(output[0].tolist()))
-        f.stop()
-    except ValueError:
-        print("Error")
+
+def save_model():
+    # 1. Create models directory
+    MODEL_PATH = Path("models")
+    MODEL_PATH.mkdir(parents=True, exist_ok=True)
+
+    # 2. Create model save path
+    MODEL_NAME = model_name
+    MODEL_SAVE_PATH = MODEL_PATH / MODEL_NAME
+
+    # 3. Save the model state dict
+    print(f"Saving model to: {MODEL_SAVE_PATH}")
+    torch.save(obj=model.state_dict(),  # only saving the state_dict() only saves the models learned parameters
+               f=MODEL_SAVE_PATH)
+
+
+# create a PyTorch optimizer
+optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
+
+dataset = load_dataset("wiki_qa")['train']
+
+data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+
+model.train()
+
+print("Starting Training")
+for epoch in range(max_iters):
+    for i, (questions) in enumerate(data_loader):
+        # move data to the device
+        question_encoded = encode(questions['question']).to(device)
+        answer_encoded = torch.tensor([stoi[c] for c in questions['answer']]).to(device)
+        label = torch.tensor(questions['label']).to(device)
+
+        # forward pass
+        logits = finetuned_model(question_encoded, answer_encoded)
+        loss = F.cross_entropy(logits, label)
+
+        # backward pass and optimization
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+# generate from the model
+question = 'What is the meaning of life?'
+question = torch.tensor(encode(question), dtype=torch.long).to(device)
+print(decode(model.generate(question, max_new_tokens=500)[0].tolist()))

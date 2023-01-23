@@ -14,7 +14,6 @@ import os
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("Device: {}".format(device))
 
-
 with open('RedditVotes/comments.csv', 'r') as f:
     reader = csv.reader(f)
     preprocessed_comments = [row for row in reader]
@@ -36,10 +35,11 @@ class TextClassifier(nn.Module):
         self.conv = nn.Conv1d(in_channels=embedding_dim, out_channels=hidden_dim, kernel_size=3, padding=1)
 
         # Gated Recurrent Unit (GRU) layer
-        self.gru = nn.GRU(input_size=hidden_dim, hidden_size=hidden_dim, num_layers=2, batch_first=True, bidirectional=True)
+        self.gru = nn.GRU(input_size=hidden_dim, hidden_size=hidden_dim, num_layers=2, batch_first=True,
+                          bidirectional=True)
 
         # Fully-connected layer
-        self.fc = nn.Linear(in_features=hidden_dim*2, out_features=output_dim)
+        self.fc = nn.Linear(in_features=hidden_dim * 2, out_features=output_dim)
 
         # Activation function
         self.act = nn.Sigmoid()
@@ -69,8 +69,10 @@ class TextClassifier(nn.Module):
 
         return x
 
+
 # Convert the comments to vectors
 vectors = []
+
 
 def top_words(texts, n):
     # Flatten the list of texts into a single list of words
@@ -80,7 +82,8 @@ def top_words(texts, n):
     word_counts = Counter(words)
 
     # Return the top N words
-    return [word for word, count in word_counts.most_common(n)] 
+    return [word for word, count in word_counts.most_common(n)]
+
 
 def one_hot_encode(text, vocabulary):
     # Initialize a vector of zeros
@@ -95,6 +98,7 @@ def one_hot_encode(text, vocabulary):
             vector[vocabulary[word]] = 1
 
     return vector
+
 
 vocab_amount = 256
 top_words = top_words(preprocessed_comments, vocab_amount)
@@ -125,8 +129,8 @@ targets = torch.tensor(scores).to(device)
 model = TextClassifier(len(top_words), 128, vocab_amount, 1).to(device)
 
 if os.path.exists('./models/redditvotes-0.pth'):
-        print("Loaded Model")
-        model.load_state_dict(torch.load(f='./models/redditvotes-0.pth'))
+    print("Loaded Model")
+    model.load_state_dict(torch.load(f='./models/redditvotes-0.pth'))
 
 criterion = nn.MSELoss().to(device)
 optimizer = optim.Adam(model.parameters(), lr=1.0)
@@ -163,7 +167,7 @@ for epoch in range(max_epochs):
     if epoch % 10 == 0:
         print(f'Epoch {epoch}: loss = {loss:.4f}, Input: {targets[test_id]}, Output: {output[test_id]}')
     if epoch % 50 == 0:
-    # 1. Create models directory
+        # 1. Create models directory
         MODEL_PATH = Path("models")
         MODEL_PATH.mkdir(parents=True, exist_ok=True)
 
@@ -174,8 +178,7 @@ for epoch in range(max_epochs):
         # 3. Save the model state dict
         print(f"Saving model to: {MODEL_SAVE_PATH}")
         torch.save(obj=model.state_dict(),  # only saving the state_dict() only saves the models learned parameters
-                    f=MODEL_SAVE_PATH)
-
+                   f=MODEL_SAVE_PATH)
 
 # 1. Create models directory
 MODEL_PATH = Path("models")
@@ -188,4 +191,4 @@ MODEL_SAVE_PATH = MODEL_PATH / MODEL_NAME
 # 3. Save the model state dict
 print(f"Saving model to: {MODEL_SAVE_PATH}")
 torch.save(obj=model.state_dict(),  # only saving the state_dict() only saves the models learned parameters
-            f=MODEL_SAVE_PATH)
+           f=MODEL_SAVE_PATH)
