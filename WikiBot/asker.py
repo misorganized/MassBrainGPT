@@ -1,12 +1,10 @@
 import os
-from tqdm import tqdm
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
-import string
 from timers import FunctionTimer
 
-model_name = 'wiki-bot-0.pth'
+model_name = 'wiki-bot-1.pth'
 batch_size = 75  # how many independent sequences will we process in parallel?
 block_size = 256  # what is the maximum context length for predictions?
 max_iters = 2000  # how many iterations to train for?
